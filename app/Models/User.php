@@ -11,12 +11,15 @@ use App\Http\Controllers\Admin\UserManagementController;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasRoles, Notifiable;
+    use Notifiable, HasApiTokens, HasRoles, Notifiable;
 
     protected $fillable = [
         'name',
         'email',
         'password',
+        'profile_photo',
+        'bank_account_number',
+        'bank_account_name',
     ];
 
     protected $hidden = [
@@ -29,4 +32,29 @@ class User extends Authenticatable
         'password' => 'hashed',
     ];
     protected $guard_name = 'web';
+    public function orders()
+    {
+        return $this->hasMany(Order::class);
+    }
+    public function getProfilePhotoUrlAttribute()
+    {
+        return $this->profile_photo 
+            ? asset('storage/' . $this->profile_photo)
+            : asset('default-avatar.png');
+    }
+    public function isRestaurant()
+    {
+        return $this->role === 'restaurant';
+    }
+    // Tambahkan relasi produk
+    public function products()
+    {
+        return $this->hasMany(Product::class, 'user_id');
+    }
+
+    // Tambahkan method fallback jika tidak ada produk
+    public function getProductsAttribute()
+    {
+        return $this->products()->get() ?? collect([]);
+    }
 }

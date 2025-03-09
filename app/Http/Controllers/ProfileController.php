@@ -7,8 +7,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
-use Spatie\Permission\Models\Role;
 
 class ProfileController extends Controller
 {
@@ -25,17 +26,61 @@ class ProfileController extends Controller
     /**
      * Update the user's profile information.
      */
-    public function update(ProfileUpdateRequest $request): RedirectResponse
+    public function update(Request $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,' . $user->id,
+            'profile_photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+        ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
         }
 
-        $request->user()->save();
+        // Update nama dan email
+        $user->name = $request->input('name');
+        
+        // Cek perubahan email
+        if ($user->email !== $request->input('email')) {
+            $user->email = $request->input('email');
+            $user->email_verified_at = null;
+        }
+
+        // Proses upload foto profil
+        if ($request->hasFile('profile_photo')) {
+            // Hapus foto lama jika ada
+            if ($user->profile_photo) {
+                Storage::disk('public')->delete($user->profile_photo);
+            }
+
+            // Simpan foto baru
+            $photoPath = $request->file('profile_photo')->store('profile_photos', 'public');
+            $user->profile_photo = $photoPath;
+        }
+
+        $user->save();
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
+    }
+
+    /**
+     * Hapus foto profil
+     */
+    public function removeProfilePhoto(): RedirectResponse
+    {
+        $user = Auth::user();
+
+        // Hapus foto profil jika ada
+        if ($user->profile_photo) {
+            Storage::disk('public')->delete($user->profile_photo);
+            $user->profile_photo = null;
+            $user->save();
+        }
+
+        return back()->with('status', 'profile-photo-removed');
     }
 
     /**
@@ -49,6 +94,11 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
+        // Hapus foto profil jika ada
+        if ($user->profile_photo) {
+            Storage::disk('public')->delete($user->profile_photo);
+        }
+
         Auth::logout();
 
         $user->delete();
@@ -58,4 +108,18 @@ class ProfileController extends Controller
 
         return Redirect::to('/');
     }
+    public function updateBankDetails(Request $request)
+{
+    $request->validate([
+        'bank_account_number' => 'required|string|max:255',
+        'bank_account_name' => 'required|string|max:255',
+    ]);
+
+    $user = auth()->user();
+    $user->bank_account_number = $request->bank_account_number;
+    $user->bank_account_name = $request->bank_account_name;
+    $user->save();
+
+    return redirect()->back()->with('success', 'Informasi rekening bank berhasil diperbarui.');
+}
 }
